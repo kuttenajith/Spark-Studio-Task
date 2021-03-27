@@ -1,0 +1,13 @@
+.imageItem {
+  max-width: 400px;
+}
+
+.loadingBar {
+  max-width: 400px;
+}
+
+.mainContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}

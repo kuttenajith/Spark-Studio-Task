@@ -1,0 +1,213 @@
+const Container = () => {
+  const [searchTerms, setSearchTerms] = React.useState('')
+  const [searchResults, setSearchResults] = React.useState([])
+  const [noResults, setNoResults] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+  
+  const handleSearchForImages = React.useCallback((currentSearchTerms) => {
+    setSearchResults([])
+    if(currentSearchTerms) {
+      setLoading(true)
+      api.searchForImages({ searchTerms: currentSearchTerms })
+      .then(data => {
+        setLoading(false)
+        setSearchResults(data.items)
+        setNoResults(data.items.length === 0)
+      })
+    }
+  }, [setSearchResults])
+  
+  const debounceSearchForImages = React.useCallback(
+    _.debounce(handleSearchForImages, 300),
+    []
+  )  
+  
+  React.useEffect(() => {
+    debounceSearchForImages(searchTerms)
+  }, [searchTerms])
+  
+  const refreshSearch = React.useCallback((currentSearchTerms) => {
+      console.log(currentSearchTerms)
+      debounceSearchForImages(currentSearchTerms)
+    },
+    []
+  )  
+  
+  return (
+    <section className="section">
+      <div className="container has-text-centered mainContainer">
+        <p className="title">
+          <figure className="image">
+            <img src="https://cdn.kustomerhostedcontent.com/media/5aecd7338a0607779d1ec9cc/966e09a41a33f89fe18f2ab227336f09.png" />
+          </figure>
+        </p>
+        <p className="subtitle">
+          A custom-built page to search for images on Flickr
+          <br />
+          Click an image to view it directly on Flickr
+        </p>
+        <SearchForm searchTerms={searchTerms} setSearchTerms={setSearchTerms} onSearchClicked={refreshSearch} />
+        <Gallery searchResults={searchResults} searchTerms={searchTerms} loading={loading} noResults={noResults}/> 
+      </div>
+    </section>
+  )
+}
+
+const Gallery = ({ searchResults, searchTerms, loading, noResults }) => {
+  if (loading) {
+    return (
+      <progress className="progress is-small is-info loadingBar" max="10"/>
+    )
+  }
+  if(noResults) {
+    return (
+      <p>
+        No images match your query
+      </p>
+    )
+  }
+  return (
+    <div class="columns is-mobile is-multiline is-centered">
+      {searchResults.map((result) => {
+        return ( 
+          <div className="column is-narrow">
+            <ImageItem imageItem={result} searchTerms={searchTerms} />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+const ImageItem = ({ imageItem, searchTerms }) => {
+  const cleanedAuthor = React.useCallback((author) => {
+    const quoteMarkIndex = author.indexOf('"')
+    if(quoteMarkIndex === -1) return author
+    return author.substring(quoteMarkIndex+1, author.length - 2)
+  }, [])
+  
+  const { 
+    title,
+    link,
+    tags,
+    author,
+    media: {
+      m: imgSrc
+    }
+  } = imageItem
+  return (
+    <div className="card imageItem" key={link}>
+      <div className="card-image">
+        <figure>
+          <a target="_blank" rel="noopener noreferrer" href={link}>
+            <img src={imgSrc} alt={title} />
+          </a>
+        </figure>
+      </div>
+      <div className="card-content">
+        <div className="media">
+          <div className="media-content">
+            
+            <p className="title is-4">{title}</p>
+            <p className="subtitle is-6">by: {cleanedAuthor(author)}</p>
+          </div>
+        </div>
+
+        <div className="content">
+          <p>{tags && tags.split(' ').map(tag => {
+              const highlighted = utils.tagsAsArray(searchTerms).includes(tag)
+              const tagClasses = `tag is-info mx-1 ${highlighted ? 'has-text-weight-bold' : ''}`
+              return (
+                <span className={tagClasses}>{tag}</span>
+              )
+            })}
+            
+          </p>
+          <br />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const SearchForm = ({searchTerms, setSearchTerms, onSearchClicked}) => {
+  
+  const handleChangeSearchTerms = React.useCallback((el) => {
+    setSearchTerms(el.target.value)
+  }, [setSearchTerms])
+  
+  const handleClickSearch = React.useCallback((currentSearchTerms) => () => {
+    onSearchClicked(currentSearchTerms)
+  }, [])
+  
+  return (
+    <div className="level">
+      <div className="level-item has-text-centered">
+        <div className="field has-addons">
+          <div className="control is-expanded">
+            <input className="input" type="search" placeholder="Search for images" value={searchTerms} onChange={handleChangeSearchTerms} />
+          </div>
+          <div className="control">
+            <a className="button is-info" onClick={handleClickSearch(searchTerms)}>
+              Search
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const utils = {
+  tagsAsArray: (searchTerms) => searchTerms.toLowerCase().split(' ')
+}
+
+const api = {
+  searchForImages: ({ searchTerms }) => {
+    return fetch(createFlickrQueryURL({ searchTerms }))
+    .then((response) => response.text())
+    .then((responseText) => {
+      // A JSONP response, remove the outer chars: "?(json);"
+      const rawJSON = responseText.replace(/\n/g, ' ').match(/\?\((.*)\);/)
+      if(!rawJSON) {
+        throw new Error("error receiving data from Flickr - incorrect format")
+      }
+      // select inner JSON
+      const json = JSON.parse(rawJSON[1])
+      const data = cleanFlickrResponse(json)
+      return data
+    })
+  }
+}
+
+// Removes characters from response and parse to get the useful data
+const cleanFlickrResponse = (json) => {
+  // magic characters in Flickr feed, app will break if Flickr ever changes this
+  const PATTERN = 'jsonFlickrFeed('
+  const dataString = json.data
+  const data = JSON.parse(dataString.substring(PATTERN.length, dataString.length-1))
+  return data
+}
+
+// The Flickr API lacks a CORS header, using a proxy adds that header in
+const JSONP_PROXY_URL = 'https://jsonp.afeld.me/'
+const FLICKR_API_BASE_URL = 'https://api.flickr.com/services/feeds/photos_public.gne'
+const FLICKR_API_FORMAT = 'json'
+
+const createFlickrQueryURL = ({ searchTerms }) => {
+  const params = {
+    format: FLICKR_API_FORMAT,
+    tags: utils.tagsAsArray(searchTerms),
+    lang: "en-us"
+  }
+  const query = new URLSearchParams(params)
+  
+  const proxyParams = {
+    url: `${FLICKR_API_BASE_URL}?${query.toString()}`
+  }
+  const proxyQuery = new URLSearchParams(proxyParams)
+  
+  return `${JSONP_PROXY_URL}?callback=?&${proxyQuery.toString()}`
+}
+
+ReactDOM.render(<Container />, document.getElementById('root'));

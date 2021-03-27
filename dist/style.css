@@ -1,0 +1,19 @@
+.imageItem {
+  max-width: 400px;
+}
+
+.loadingBar {
+  max-width: 400px;
+}
+
+.coverphoto {
+  background-image: url(../../flickr-image-searchreact-bulma/src/img/coverPhoto.png);
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.mainContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
